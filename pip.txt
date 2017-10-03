@@ -1,1 +1,4 @@
-logger==1.0
+git+https://github.com/jneo8/jieba.git@auto-nickname
+git+https://github.com/jneo8/base_conf.git@auto-nickname
+
+
