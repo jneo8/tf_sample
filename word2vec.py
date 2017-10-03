@@ -11,7 +11,10 @@ logger = logconf.Logger(__name__)
 
 
 def read_data():
-    """Read origin data use pandas."""
+    """Read origin data use pandas.
+
+    Return a list of sentence.
+    """
     source_list = [
         '獸性老公吻上癮.txt',
         '惡魔總裁的小妻子.txt',
@@ -25,7 +28,22 @@ def read_data():
         list_.append(df_)
     df = pd.concat(list_)
     logger.debug(df.shape)
+    return df['text'].tolist()
+
+def cut_sentence(x):
+    """Cut sentence use jieba."""
+    for row in x:
+        row = [jieba.cut(x) ]
+        row = [r for r in row if r is not ' ']
+    return x
+
+def main():
+    """Main."""
+    texts = read_data()
+    texts = cut_sentence(x=texts)
+    logger.debug(texts[:5])
+
 
 if __name__ == '__main__':
-    read_data()
+    main()
 
