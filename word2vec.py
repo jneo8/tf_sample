@@ -2,6 +2,7 @@
 
 import os
 import re
+import collections
 import pandas as pd
 from utils import settings
 from utils.jieba_init import jieba
@@ -57,9 +58,24 @@ def clean_doc(text):
     # logger.debug(f'text after clean {text_}')
     return text_
 
+def build_dataset(words, n_words):
+    """Process raw input into a dateset."""
+    count = [['UNK', -1]]
+
+    # Count word use collections
+    # https://docs.python.org/2/library/collections.html
+    count.extend(collections.Counter(words).most_common(n_words -1))
+    for _ in count:
+        logger.debug(_)
 
 def main():
     """Main."""
+    ###########################
+    #  Step 1 :
+    #       - Read Data, original data, a list of sentences
+    #       - clean sentence, remove special symbol.
+    #       - Cut the sentence, example: 你真的好棒 -> 你/真的/好棒
+    ##########################
     texts = read_data()
     texts = texts[:30]
     for idx, text in enumerate(texts):
@@ -68,6 +84,14 @@ def main():
 
     texts = cut_sentence(x=texts)
     logger.debug(texts)
+
+
+    ##########################
+    # Step 2 :
+    #       - Build the dictionary and rare words with UNK token.
+    #########################
+
+
 
 
 if __name__ == '__main__':
