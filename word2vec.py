@@ -1,9 +1,10 @@
 """Word2vec with tensorflow."""
 
 import os
+import re
 import pandas as pd
 from utils import settings
-import jieba
+from utils.jieba_init import jieba
 
 # logger
 from logger import logconf
@@ -30,18 +31,43 @@ def read_data():
     logger.debug(df.shape)
     return df['text'].tolist()
 
+###########################
+#  Preprocess method
+##########################
 def cut_sentence(x):
     """Cut sentence use jieba."""
+    list_ = []
     for row in x:
-        row = [jieba.cut(x) ]
-        row = [r for r in row if r is not ' ']
-    return x
+        row = list(jieba.cut(row))
+        row = [r for r in row if r not in ['\u3000', ' ']]
+        list_ += (['RowMark'] + row)
+    return list_
+
+def clean_doc(text):
+    """Remove symbol."""
+    text = str(text)
+    # logger.debug(f'text before clean {text}')
+    symbol_1 = r'https://[a-zA-Z0-9.?/&=:]*'
+    symbol_2 = '[’"#$%&\'()*+,-./:;<=>@[\\]^_`{|}]+'
+    symbol_3 = '[\s+\.\!\/_,$%^*(+\"\']+|[+——！，。？、~@#￥%……&*（）：；《）《》“”()»〔〕】【-]+'
+    symbol_4 = r'\n'
+    text_ = re.sub(symbol_1, ' ', text)
+    text_ = re.sub(symbol_2, ' ', text_)
+    text_ = re.sub(symbol_3, ' ', text_)
+    # logger.debug(f'text after clean {text_}')
+    return text_
+
 
 def main():
     """Main."""
     texts = read_data()
+    texts = texts[:30]
+    for idx, text in enumerate(texts):
+        text = clean_doc(text=text)
+        texts[idx] = text
+
     texts = cut_sentence(x=texts)
-    logger.debug(texts[:5])
+    logger.debug(texts)
 
 
 if __name__ == '__main__':
