@@ -1,10 +1,9 @@
 """Jieba Init."""
 import os
-import jieba
 import json
+import jieba
 
-
-from settings import SOURCE_DIR
+from .settings import SOURCE_DIR
 from logger import logconf
 
 logger = logconf.Logger(__name__)
@@ -20,12 +19,11 @@ def jieba_init():
             if filename.endswith('.txt')
         ]
         for path in jieba_dict_paths:
-            jieba.loal_userdict(path)
+            jieba.load_userdict(path)
             logger.info(f'Jieba load userdict {path}')
 
         # Load stopwords
-        logger.info('Init Jieba')
-        stop_word_path = os.paht.join(SOURCE, 'dictionary', 'stopwords.json')
+        stop_word_path = os.path.join(SOURCE_DIR, 'dictionary', 'stopwords.json')
 
         stopword_set = set()
         with open(stop_word_path, 'r') as csv:
@@ -35,6 +33,7 @@ def jieba_init():
 
         logger.info(f'Jieba load stop word {stop_word_path}')
         jieba.initialize()
+        logger.info('Init Jieba')
     except:
         import traceback
         logger.error(traceback.format_exc())
