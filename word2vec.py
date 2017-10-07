@@ -59,14 +59,40 @@ def clean_doc(text):
     return text_
 
 def build_dataset(words, n_words):
-    """Process raw input into a dateset."""
-    count = [['UNK', -1]]
+    """Process raw input into a dateset.
 
+    Filling 4 global variables:
+        - data:
+            List of codes (integers from 0 to n_words - 1).
+            This is the original text but words are replaces by their codes
+        - count
+            Map of words to count of occurences.
+        - dictionary
+            Map of words to their codes(integers).
+        - reverse_dictionary
+            Map codes(integers) to words(strings)
+    """
     # Count word use collections
     # https://docs.python.org/2/library/collections.html
+    count = [['UNK', -1]]
+    logger.debug(type(count))
     count.extend(collections.Counter(words).most_common(n_words -1))
-    for _ in count:
-        logger.debug(_)
+    dictionary = dict()
+    for word, _ in count:
+        dictionary[word] = len(dictionary)  # The code of word is the idx in count.
+        logger.debug(f'word: {word} count_num: {_} code: {dictionary[word]}')
+
+    data = []
+    unk_count = 0
+
+    for word in words:
+        idx = dictionary.get(word, 0)
+        if idx == 0:  # word not in count -> unk word.
+            unk_count += 1
+        data.append(idx)
+    count[0][1] = unk_count
+    reversed_dictionary = dict((zip(dictionary.values(), dictionary.keys())))
+    return data, count, dictionary, reverse_dictionary
 
 def main():
     """Main."""
@@ -77,19 +103,20 @@ def main():
     #       - Cut the sentence, example: 你真的好棒 -> 你/真的/好棒
     ##########################
     texts = read_data()
-    texts = texts[:30]
+    texts = texts[:1000]
     for idx, text in enumerate(texts):
         text = clean_doc(text=text)
         texts[idx] = text
 
     texts = cut_sentence(x=texts)
-    logger.debug(texts)
-
 
     ##########################
     # Step 2 :
     #       - Build the dictionary and rare words with UNK token.
     #########################
+    vocabulary_size = 10
+    build_dataset(words=texts, n_words=vocabulary_size)
+
 
 
 
