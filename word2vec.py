@@ -69,7 +69,7 @@ def build_dataset(words, n_words):
             Map of words to count of occurences.
         - dictionary
             Map of words to their codes(integers).
-        - reverse_dictionary
+        - reversed_dictionary
             Map codes(integers) to words(strings)
     """
     # Count word use collections
@@ -80,7 +80,7 @@ def build_dataset(words, n_words):
     dictionary = dict()
     for word, _ in count:
         dictionary[word] = len(dictionary)  # The code of word is the idx in count.
-        logger.debug(f'word: {word} count_num: {_} code: {dictionary[word]}')
+        # logger.debug(f'word: {word} count_num: {_} code: {dictionary[word]}')
 
     data = []
     unk_count = 0
@@ -91,8 +91,8 @@ def build_dataset(words, n_words):
             unk_count += 1
         data.append(idx)
     count[0][1] = unk_count
-    reversed_dictionary = dict((zip(dictionary.values(), dictionary.keys())))
-    return data, count, dictionary, reverse_dictionary
+    reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
+    return data, count, dictionary, reversed_dictionary
 
 def main():
     """Main."""
@@ -103,7 +103,7 @@ def main():
     #       - Cut the sentence, example: 你真的好棒 -> 你/真的/好棒
     ##########################
     texts = read_data()
-    texts = texts[:1000]
+    texts = texts
     for idx, text in enumerate(texts):
         text = clean_doc(text=text)
         texts[idx] = text
@@ -114,8 +114,21 @@ def main():
     # Step 2 :
     #       - Build the dictionary and rare words with UNK token.
     #########################
-    vocabulary_size = 10
-    build_dataset(words=texts, n_words=vocabulary_size)
+    vocabulary_size = 100000
+    data, count, dictionary, reversed_dictionary = build_dataset(
+            words=texts, n_words=vocabulary_size)
+    del texts  # Hint to reduce memory
+    logger.info(f'Most common words (+UNK) {count[:5]}')
+    for x in range(0, 10):
+        logger.debug(f'{data[x]} {reversed_dictionary[data[x]]}')
+
+
+    ############################
+    # Step 3: Function to generate a training batch for the skip-gram model
+    ############################
+
+
+
 
 
 
