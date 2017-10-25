@@ -4,12 +4,17 @@ import os
 import re
 import collections
 import pandas as pd
+import numpy as np
 from utils import settings
 from utils.jieba_init import jieba
 
 # logger
 from logger import logconf
 logger = logconf.Logger(__name__)
+
+
+# Init data_index
+data_index = 0
 
 
 def read_data():
@@ -94,6 +99,40 @@ def build_dataset(words, n_words):
     reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
     return data, count, dictionary, reversed_dictionary
 
+def generate_batch(data, batch_size, num_skips, skip_window):
+    """Generate a train batch fpr the skip-gram model."""
+    global data_index
+    logger.debug(f'data_index {data_index}')
+    assert batch_size % num_skips == 0
+    assert num_skips <= 2 * skip_window
+    batch = np.ndarray(shape=(batch_size), dtype=np.int32)
+    labels = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+    span = 2 * skip_window + 1  # [skip_window target skip_windom]
+    buffer = collections.deque(maxlen=span)
+    if data_index + span > len(data):
+        data_index += span
+    buffer.extend(data[data_index:data_index + span])
+    data_index += span
+    for i in range(batch_size // num_skips):
+        context_words = [w for w in range(span) if w != skip_window]
+        words_to_use = collections.deque(context_words)
+        logger.debug(words_to_use)
+        for j in range(num_skips):
+            batch[i * num_skips + j] = buffer[skip_window]
+            context_word = words_to_use.pop()
+            labels[i * num_skips + j, 0] = buffer[context_word]
+        if data_index == len(data):
+            buffer[:] = data[:span]
+            data_index = span
+        else:
+            buffer.append(data[data_index])
+            data_index += 1
+
+    # Backtrack a little bit to avoid skipping words in the end of a batch
+
+    data_index = (data_index + len(data) - span % len(data))
+    return batch, labels
+
 def main():
     """Main."""
     ###########################
@@ -103,7 +142,7 @@ def main():
     #       - Cut the sentence, example: 你真的好棒 -> 你/真的/好棒
     ##########################
     texts = read_data()
-    texts = texts
+    texts = texts[:1000]
     for idx, text in enumerate(texts):
         text = clean_doc(text=text)
         texts[idx] = text
@@ -115,6 +154,7 @@ def main():
     #       - Build the dictionary and rare words with UNK token.
     #########################
     vocabulary_size = 100000
+    global data
     data, count, dictionary, reversed_dictionary = build_dataset(
             words=texts, n_words=vocabulary_size)
     del texts  # Hint to reduce memory
@@ -124,13 +164,17 @@ def main():
 
 
     ############################
-    # Step 3: Function to generate a training batch for the skip-gram model
+    # Step 3: Skip-gram model
     ############################
+    batch, labels = generate_batch(data=data, batch_size=8, num_skips=2, skip_window=1)
 
-
-
-
-
+    for i in range(8):
+        logger.debug(
+            f'{batch[i]} {reversed_dictionary[batch[i]]}'
+            f' -> '
+            f'{labels[i , 0]} '
+            f'{reversed_dictionary[labels[i, 0]]}'
+        )
 
 
 
