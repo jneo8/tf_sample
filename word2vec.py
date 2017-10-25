@@ -154,7 +154,6 @@ def main():
     #       - Build the dictionary and rare words with UNK token.
     #########################
     vocabulary_size = 100000
-    global data
     data, count, dictionary, reversed_dictionary = build_dataset(
             words=texts, n_words=vocabulary_size)
     del texts  # Hint to reduce memory
@@ -166,7 +165,47 @@ def main():
     ############################
     # Step 3: Skip-gram model
     ############################
-    batch, labels = generate_batch(data=data, batch_size=8, num_skips=2, skip_window=1)
+
+    # Init data_index
+    data_index = 0
+
+    def generate_batch(batch_size, num_skips, skip_window):
+        """Generate a train batch fpr the skip-gram model."""
+        global data_index
+        logger.debug(f'data_index {data_index}')
+        assert batch_size % num_skips == 0
+        assert num_skips <= 2 * skip_window
+        batch = np.ndarray(shape=(batch_size), dtype=np.int32)
+        labels = np.ndarray(shape=(batch_size, 1), dtype=np.int32)
+        span = 2 * skip_window + 1  # [skip_window target skip_windom]
+        buffer = collections.deque(maxlen=span)
+        if data_index + span > len(data):
+            data_index += span
+        buffer.extend(data[data_index:data_index + span])
+        data_index += span
+        for i in range(batch_size // num_skips):
+            context_words = [w for w in range(span) if w != skip_window]
+            words_to_use = collections.deque(context_words)
+            logger.debug(words_to_use)
+            for j in range(num_skips):
+                batch[i * num_skips + j] = buffer[skip_window]
+                context_word = words_to_use.pop()
+                labels[i * num_skips + j, 0] = buffer[context_word]
+            if data_index == len(data):
+                buffer[:] = data[:span]
+                data_index = span
+            else:
+                buffer.append(data[data_index])
+                data_index += 1
+
+        # Backtrack a little bit to avoid skipping words in the end of a batch
+
+        data_index = (data_index + len(data) - span % len(data))
+        return batch, labels
+
+
+    # test
+    batch, labels = generate_batch(batch_size=8, num_skips=2, skip_window=1)
 
     for i in range(8):
         logger.debug(
@@ -175,6 +214,31 @@ def main():
             f'{labels[i , 0]} '
             f'{reversed_dictionary[labels[i, 0]]}'
         )
+
+
+    #########################
+    # Step 4: Build and train a skip-gram model.
+    #########################
+
+    batch_size = 128
+    embedding_size = 128    # Dimension of the embedding vector.
+    skip_window = 1         # How many word to consider left and right.
+    num_skips = 2           # How many times to reuse an input to generate a label.
+    num_sampled = 64        # Number of negative examples to sample.
+
+
+    # We pick a random validation set to sample nearest neighbors.
+    # Here we limit the validation samples to the words that have a low numeric ID,
+    # which by construction are also the most frequnt.
+    # These 3 variables are used to only for displaying model accuracy,
+    # They don't affect calculation.
+
+    valid_size = 16
+    valid_window = 100
+    valid_examples = np.random.choice(valid_window, valid_size, replace=True)
+
+
+
 
 
 
