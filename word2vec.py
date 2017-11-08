@@ -203,12 +203,59 @@ def main():
         valid_dataset = tf.constant(valid_examples, dtype=tf.int32)
 
         # Ops and valid pinned to the cpu because of missing GPU implemention
-
         with tf.device('/cpu:0'):
             # Look up embedding for input.
             embedding = tf.Variable(
                 tf.random_uniform([vocabulary_size, embedding_size], -1.0, 1.0)
             )
+            logger.debug(embedding)
+
+            embed = tf.nn.embedding_lookup(embedding, train_inputs)
+            logger.debug(embed)
+
+            nce_weights = tf.Variable(
+                tf.truncated_normal(
+                    [vocabulary_size, e=mbedding_size],
+                    stddev=1.0 / math.sqrt(embedding_size)
+                )
+            )
+            logger.debug(nce_weights)
+
+        # Computer the average NCE loss for batch
+        # tf.nec_loss automatically draws a new sample of the negative labels each
+        # time we evaluate the loss.
+        # Explanation of the earning of NCEloss:
+        #   http://mccormickml.com/2016/04/19/word2vec-tutorial-the-skip-gram-model/
+        loss = tf.reduce_mean(
+            tf.nn.nce_loss(
+                weights=nce_weights,
+                biases=nce_biases,
+                labels=train_labels,
+                inputs=embed,
+                num_sampled=num_sampled,
+                num_classes=vocabulary_size,
+            )
+        )
+        # Construct the SGD optimizer using a learning rare of 1.0
+        optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
+
+        # Compute the cosine similarity between a learning rare of 1.0.
+        norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+        normalized_embeddings = embeddings / norm
+        valid_embeddings = tf.nn.embedding_lookup(
+            normalized_embeddings,
+            valid_dateset,
+        )
+
+        simlarity = tf.matmul(
+            valid_embeddings, normalized_embeddings, transpose_b=True
+        )
+
+        # Add variable initializer.
+        init = tf.global_variables_initializer()
+
+
+
 
 
 
