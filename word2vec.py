@@ -3,6 +3,7 @@
 import os
 import re
 import collections
+import math
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -215,7 +216,7 @@ def main():
 
             nce_weights = tf.Variable(
                 tf.truncated_normal(
-                    [vocabulary_size, e=mbedding_size],
+                    [vocabulary_size, embedding_size],
                     stddev=1.0 / math.sqrt(embedding_size)
                 )
             )
@@ -254,9 +255,30 @@ def main():
         # Add variable initializer.
         init = tf.global_variables_initializer()
 
+    ########################
+    # Step 5: Begin Training
+    ########################
 
 
+    num_steps = 100
 
+    with tf.Session(graph=graph) as session:
+        init.run()
+        print("Initialized")
+
+        average_loss = 0
+
+        for step in xrange(num_steps):
+            batch_inputs, batch_labels = generate_batch(
+                batch_size, num_skips, skip_window
+            )
+            feed_dict = {
+                train_inputs: batch_inputs,
+                train_labels: batchs,
+            }
+
+            # We perform one update step by evaluating the optimizer op
+            #
 
 
 
