@@ -1,5 +1,1 @@
-git+https://github.com/jneo8/jieba.git@auto-nickname
-git+https://github.com/jneo8/neo_logger.git@auto-nickname
-
-
-pandas==0.20.3
+git+https://github.com/jneo8/neo_logger.git
