@@ -9,8 +9,10 @@ from tensorflow.contrib import rnn
 # Import MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
 
+PROJ_NAME = "RNN"
+
 # Init logger
-logger = Logger(__name__)
+logger = Logger(PROJ_NAME)
 mnist = input_data.read_data_sets("/tmp/data/", one_hot=True)
 
 
@@ -36,7 +38,7 @@ weight = {
 }
 
 biases = {
-    "out": tf.Variable(tf.random_normal([num_classes])
+    "out": tf.Variable(tf.random_normal([num_classes]))
 }
 
 
@@ -71,21 +73,40 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 init = tf.global_variables_initializer()
 
 
+# Summary
+log_path = "/tmp/tf"
+summary_step = 10
+tf.summary.scalar("loss", loss_op)
+tf.summary.scalar("Acc", accuracy)
+merged_summary_op = tf.summary.merge_all()
+
+
 with tf.Session() as sess:
 
     # Run initializer
     sess.run(init)
 
-    for step in range(1, traing_step + 1):
+    # Writer
+    summary_writer = tf.summary.FileWriter(log_path + f"/{PROJ_NAME}", graph=tf.get_default_graph())
+
+    for step in range(1, training_steps + 1):
         batch_x, batch_y = mnist.train.next_batch(batch_size)
 
         # Reshape data to get 28 seq of 28 elements
         batch_x = batch_x.reshape((batch_size, timesteps, num_input))
         # Run optimization op (backprop)
         sess.run(train_op, feed_dict={X: batch_x, Y: batch_y})
-        if step % display_step == 0 or step ==1:
-            # Calculate batch loss and accuracy
-            loss, acc = sess.run([loss_op, accuracy], feed_dict={X: batch_x, Y: batch_y})
-            logger.info(f"Stet {step}, Minibatch Loss = {loss}, Training Accuracy = {acc}")
+        if step % summary_step == 0 or step == 1:
+            loss, acc, summary = sess.run([loss_op, accuracy, merged_summary_op], feed_dict={X: batch_x, Y: batch_y})
+            summary_writer.add_summary(summary, step)
+
+            if step % display_step == 0 or step ==1:
+                logger.info(f"Step {step}, Minibatch Loss = {loss}, Training Accuracy = {acc}")
+
     logger.info("Optimization Finished!")
+
+    test_len = 128
+    test_data = mnist.test.images[:test_len].reshape((-1, timesteps, num_input))
+    test_label = mnist.test.labels[:test_len]
+    logger.info(f"Test accuracy: {sess.run(accuracy, feed_dict={X: test_data, Y: test_label})}")
 
