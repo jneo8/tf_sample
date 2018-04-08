@@ -14,3 +14,11 @@ pip install tensorflow
 ```
 pip install tensorflow-gpu
 ```
+
+
+- tensorboard
+
+**Summary dir to `/tmp/tf/{project_name}`**
+```
+tensorboard --logdir=/tmp/tf
+```
