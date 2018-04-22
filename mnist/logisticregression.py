@@ -58,6 +58,7 @@ def main():
     def evaluate(output, y):
         corroct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(y, 1))
         accuracy = tf.reduce_mean(tf.cast(corroct_prediction, tf.float32))
+        tf.summary.scalar("Acc", accuracy)
         return accuracy
 
     with tf.Graph().as_default():
@@ -74,7 +75,6 @@ def main():
         eval_op = evaluate(output, y)
         summary_op = tf.summary.merge_all()
 
-        saver = tf.train.Saver()
         sess = tf.Session()
 
         summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
@@ -106,7 +106,6 @@ def main():
                 logger.debug(f"Epoch: {epoch} Validation Error: {(1 - accuracy)}")
                 summary_str = sess.run(summary_op, feed_dict=feed_dict)
                 summary_writer.add_summary(summary_str, sess.run(global_step))
-                saver.save(sess, LOG_PATH, global_step=global_step)
 
         logger.info("Optimization Finished!!")
 
