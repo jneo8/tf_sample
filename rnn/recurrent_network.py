@@ -1,6 +1,7 @@
 """Recurrent Neural Network
 Example.
 """
+from datetime import datetime
 from neologger import Logger
 import tensorflow as tf
 from tensorflow.contrib import rnn
@@ -9,7 +10,7 @@ from tensorflow.contrib import rnn
 # Import MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
 
-PROJ_NAME = "RNN"
+PROJ_NAME = f"RNN-{datetime.strftime(datetime.now(), '%Y%m%d-%H%M')}"
 
 # Init logger
 logger = Logger(PROJ_NAME)
