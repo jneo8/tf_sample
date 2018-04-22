@@ -109,5 +109,13 @@ def main():
 
         logger.info("Optimization Finished!!")
 
+        test_feed_dict = {
+            x: mnist.test.images,
+            y: mnist.test.labels,
+        }
+
+        accuracy = sess.run(eval_op, feed_dict=test_feed_dict)
+        logger.info(f"Test Accuracy: {accuracy}")
+
 if __name__ == "__main__":
     main()
