@@ -36,7 +36,7 @@ def main():
 
     # Define Logistic Regression
     def inference(x):
-        """Products a probability distribution over the output classes given a minibatch."""
+        """Define output."""
         with tf.variable_scope("hidden_1"):
             hidden_1 = layer(x, [784, 256], [256])
         with tf.variable_scope("hidden_2"):
@@ -47,11 +47,18 @@ def main():
 
     def loss(output, y):
         """Given the corroct labels for a minibatch, we should be able to compute the average error per data sample."""
-        xentropy = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=y)
-        loss = tf.reduce_mean(xentropy)
+
+        # Find x_entropy
+        x_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=output, labels=y)
+
+        # find loss
+        loss = tf.reduce_mean(x_entropy)
+
+        tf.summary.scalar("loss", loss)
         return loss
 
     def training(cost, global_step):
+        """Return training optimizer."""
         tf.summary.scalar("cost", cost)
         optimizer = tf.train.GradientDescentOptimizer(
             learning_rate
@@ -60,6 +67,7 @@ def main():
         return train_op
 
     def evaluate(output, y):
+        """Evaluate accuracy."""
         corroct_prediction = tf.equal(tf.argmax(output, 1), tf.argmax(y, 1))
         accuracy = tf.reduce_mean(tf.cast(corroct_prediction, tf.float32))
         tf.summary.scalar("Acc", accuracy)
@@ -72,19 +80,23 @@ def main():
         # 0-9 digits recognition -> 10 classes
         y = tf.placeholder("float", [None, 10])
 
+        # Define network
         output = inference(x)
         cost = loss(output, y)
         global_step = tf.Variable(0, name="global_step", trainable=False)
         train_op = training(cost, global_step)
+
+        # define evaluate optimizer & summary optimizer
         eval_op = evaluate(output, y)
         summary_op = tf.summary.merge_all()
 
+        # Init
         sess = tf.Session()
-
         summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
         init_op = tf.initialize_all_variables()
         sess.run(init_op)
 
+        # For loop in each epochs.
         for epoch in range(training_epochs):
 
             avg_cost = 0.
