@@ -20,14 +20,14 @@ def main():
 
     # Paramters
     learning_rate = 0.01
-    training_epochs = 10
+    training_epochs = 500
     batch_size = 100
     display_step = 1
 
     def conv2d(input, weight_shape, bias_shape):
         """Conv2d layer."""
-        in_ = weight_shape[0] * weight_shape[1] * weight_shape[2]
-        weight_init = tf.random_normal_initializer(stddev=(2.0 / in_) ** 0.5)
+        incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
+        weight_init = tf.random_normal_initializer(stddev=(2.0 / incoming) ** 0.5)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
         bias_init = tf.constant_initializer(value=0)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
@@ -102,66 +102,82 @@ def main():
         train_op = optimizer.minimize(cost, global_step=global_step)
         return train_op
 
-
     with tf.Graph().as_default():
-        # mnist data image of shape 28*28=784
-        x = tf.placeholder("float", [None, 784])
 
-        # 0-9 digits recognition -> 10 classes
-        y = tf.placeholder("float", [None, 10])
+        with tf.variable_scope("conv_model"):
+            # mnist data image of shape 28*28=784
+            x = tf.placeholder("float", [None, 784])
 
-        # Define network
-        output = inference(x, keep_prob=0.8)
-        cost = loss(output, y)
-        global_step = tf.Variable(0, name="global_step", trainable=False)
-        train_op = training(cost, global_step)
+            # 0-9 digits recognition -> 10 classes
+            y = tf.placeholder("float", [None, 10])
 
-        # define evaluate optimizer & summary optimizer
-        eval_op = evaluate(output, y)
-        summary_op = tf.summary.merge_all()
+            keep_prob = tf.placeholder(tf.float32)
 
-        # Init
-        sess = tf.Session()
-        summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
-        init_op = tf.global_variables_initializer()
-        sess.run(init_op)
+            # Define network
+            output = inference(x, keep_prob=keep_prob)
+            cost = loss(output, y)
+            global_step = tf.Variable(0, name="global_step", trainable=False)
+            train_op = training(cost, global_step)
 
-        # For loop in each epochs.
-        for epoch in range(training_epochs):
+            # define evaluate optimizer & summary optimizer
+            eval_op = evaluate(output, y)
+            summary_op = tf.summary.merge_all()
 
-            avg_cost = 0.
-            total_batch = int(mnist.train.num_examples / batch_size)
+            # Init
+            sess = tf.Session()
+            summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
+            init_op = tf.global_variables_initializer()
+            sess.run(init_op)
 
-            # Loop over all batches
-            for i in range(total_batch):
-                mbatch_x, mbatch_y = mnist.train.next_batch(batch_size)
-                # Fit training using batch data
-                feed_dict = {x: mbatch_x, y: mbatch_y}
-                sess.run(train_op, feed_dict=feed_dict)
-                # Compute average loss
-                minibatch_cost = sess.run(cost, feed_dict=feed_dict)
-                avg_cost += minibatch_cost / total_batch
+            tf.train.start_queue_runners(sess=sess)
+            for epoch in range(training_epochs):
 
-            # Display logs pre epoch step
-            if epoch % display_step == 0:
-                val_feed_dict = {
-                    x: mnist.validation.images,
-                    y: mnist.validation.labels,
-                }
-                accuracy = sess.run(eval_op, feed_dict=val_feed_dict)
-                logger.debug(f"Epoch: {epoch} Validation Error: {(1 - accuracy)}")
-                summary_str = sess.run(summary_op, feed_dict=feed_dict)
-                summary_writer.add_summary(summary_str, sess.run(global_step))
+                avg_cost = 0.
+                total_batch = int(mnist.train.num_examples / batch_size)
 
-        logger.info("Optimization Finished!!")
+                # Loop over all batches
+                for i in range(total_batch):
+                    mbatch_x, mbatch_y = mnist.train.next_batch(batch_size)
+                    # Fit training using batch data
+                    feed_dict = {x: mbatch_x, y: mbatch_y, keep_prob: 0.5}
+                    sess.run(train_op, feed_dict=feed_dict)
+                    # Compute average loss
+                    minibatch_cost = sess.run(cost, feed_dict=feed_dict)
+                    avg_cost += minibatch_cost / total_batch
 
-        test_feed_dict = {
-            x: mnist.test.images,
-            y: mnist.test.labels,
-        }
+                # Display logs pre epoch step
+                if epoch % display_step == 0:
+                    accuracy = sess.run(
+                        eval_op,
+                        feed_dict={
+                            x: mnist.validation.images,
+                            y: mnist.validation.labels,
+                            keep_prob: 1,
+                        }
+                    )
+                    logger.debug(f"Epoch: {epoch} Validation Error: {(1 - accuracy)}")
+                    summary_str = sess.run(
+                        summary_op,
+                        feed_dict={
+                            x: mnist.validation.images,
+                            y: mnist.validation.labels,
+                            keep_prob: 0.5,
+                        }
+                    )
+                    summary_writer.add_summary(summary_str, sess.run(global_step))
 
-        accuracy = sess.run(eval_op, feed_dict=test_feed_dict)
-        logger.info(f"Test Accuracy: {accuracy}")
+            logger.info("Optimization Finished!!")
+
+            test_feed_dict = {
+                x: mnist.test.images,
+                y: mnist.test.labels,
+                keep_prob: 0.5,
+            }
+
+            accuracy = sess.run(eval_op, feed_dict=test_feed_dict)
+            logger.info(f"Test Accuracy: {accuracy}")
+
+            logger.info(f"Test Accuracy: {accuracy}")
 
 
 if __name__ == "__main__":
