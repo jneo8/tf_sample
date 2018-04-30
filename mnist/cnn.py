@@ -177,8 +177,6 @@ def main():
             accuracy = sess.run(eval_op, feed_dict=test_feed_dict)
             logger.info(f"Test Accuracy: {accuracy}")
 
-            logger.info(f"Test Accuracy: {accuracy}")
-
 
 if __name__ == "__main__":
     main()
