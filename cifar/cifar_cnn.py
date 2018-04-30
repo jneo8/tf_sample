@@ -1,4 +1,5 @@
 """Building a Conv for Cafar in TensorFlow."""
+import os
 import tensorflow as tf
 import numpy as np
 from neologger import Logger
@@ -23,7 +24,7 @@ def main():
     batch_size = 128
     display_step = 1
 
-    def input(eval_data=True):
+    def inputs(eval_data=True):
         data_dir = os.path.join("data/cifar10_data", "cifar-10-batches-bin")
         return cifar10_input.inputs(
             eval_data=eval_data, data_dir=data_dir, batch_size=batch_size
@@ -31,16 +32,16 @@ def main():
 
     def distorted_inputs():
         data_dir = os.path.join("data/cifar10_data", "cifar-10-batches-bin")
-        return cifar10_input,distorted_inputs(data_dir=data_dir, batch_size=batch_size)
+        return cifar10_input.distorted_inputs(data_dir=data_dir, batch_size=batch_size)
 
     def filter_summary(V, weight_shape):
         ix = weight_shape[0]
         iy = weight_shape[1]
         cx, cy = 8, 8
         V_T = tf.transpose(V, (3, 0, 1, 2))
-        tf.image_summary("filters", V_T, max_images=64)
+        tf.summary.image("filters", V_T, max_outputs=64)
 
-    def conv2d(incoming, weight_shape, bias_shape, visualie=False):
+    def conv2d(incoming, weight_shape, bias_shape, visualize=False):
         incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
         weight_init = tf.random_normal_initializer(stddev=(2.0 / incoming) ** 0.5)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
@@ -51,7 +52,7 @@ def main():
         return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(incoming, W, strides=[1, 1, 1, 1], padding="SAME"), b))
 
     def max_pool(incoming, k=2):
-        return tf.nn.max_pool(incoming,m ksize=[1, k, k, 1], strides=[1, k, k, 1], padding="SAME")
+        return tf.nn.max_pool(incoming, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding="SAME")
 
     def layer(incoming, weight_shape, bias_shape):
         weight_init = tf.random_normal_initializer(stddev=(2.0 / weight_shape[0]) ** 0.05)
@@ -72,7 +73,7 @@ def main():
 
         with tf.variable_scope("fc_1"):
             dim = 1
-            for d in pool_2.get_shape()[1:].as_list()
+            for d in pool_2.get_shape()[1:].as_list():
                 dim *= d
             pool_2_flat = tf.reshape(pool_2, [-1, dim])
             fc_1 = layer(pool_2_flat, [dim, 384], [384])
@@ -108,12 +109,12 @@ def main():
 
 
     with tf.Graph().as_default():
-        with tf.variabel_scope("cifar_conv_model"):
+        with tf.variable_scope("cifar_conv_model"):
             x = tf.placeholder("float", [None, 24, 24, 3])
-            y = tf.placeholder("int", [None])
+            y = tf.placeholder("int32", [None])
             keep_prob = tf.placeholder(tf.float32)
 
-            distorted_images , distorted_labels = distorted_inputs()
+            distorted_images, distorted_labels = distorted_inputs()
             val_images, val_labels = inputs()
 
             output = inference(x, keep_prob)
@@ -147,7 +148,7 @@ def main():
                     avg_cost += new_cost / total_batch
 
                 if epoch % display_step == 0:
-                    logger.info(f"Epoch: {epoch + 1} : {avg_cost"})
+                    logger.info(f"Epoch: {epoch + 1} : {avg_cost}")
 
                     val_x, val_y = sess.run([val_images, val_labels])
                     accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
@@ -157,10 +158,10 @@ def main():
                     summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1})
                     summary_writer.add_summary(summary_str, sess.run(global_step))
 
-            logger.info(""Optimization Finished!"")
+            logger.info("Optimization Finished!")
             val_x, val_y = sess.run([val_images, val_labels])
             accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
-            logger.info(f""Test Accuracy:", {accuracy}")
+            logger.info(f"Test Accuracy:, {accuracy}")
 
 
 
