@@ -107,6 +107,61 @@ def main():
         return accuracy
 
 
+    with tf.Graph().as_default():
+        with tf.variabel_scope("cifar_conv_model"):
+            x = tf.placeholder("float", [None, 24, 24, 3])
+            y = tf.placeholder("int", [None])
+            keep_prob = tf.placeholder(tf.float32)
+
+            distorted_images , distorted_labels = distorted_inputs()
+            val_images, val_labels = inputs()
+
+            output = inference(x, keep_prob)
+            cost = loss(output, y)
+
+            global_step = tf.Variable(0, name="global_step", trainable=False)
+            train_op = training(cost, global_step)
+            eval_op = evaluate(output, y)
+            summary_op = tf.merge_all_summaries()
+            sess = tf.Session()
+            summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
+
+            init_op = tf.initialize_all_variables()
+
+            sess.run(init_op)
+            tf.train.start_queue_runners(sess=sess)
+
+            # Training cycle
+            for epoch in range(training_epochs):
+
+                avg_cost = 0.
+                total_batch = int(cifar10_input.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / batch_size)
+
+                # Loop over all batches
+                for i in range(total_batch):
+
+                    train_x, train_y = sess.run([distorted_images, distorted_labels])
+
+                    _, new_cost = sess.run([train_op, cost], feed_dict={x: train_x, y: train_y, keep_prob: 0.5})
+
+                    avg_cost += new_cost / total_batch
+
+                if epoch % display_step == 0:
+                    logger.info(f"Epoch: {epoch + 1} : {avg_cost"})
+
+                    val_x, val_y = sess.run([val_images, val_labels])
+                    accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+
+                    logger.info(f"Validation Error: {1 - accuracy}")
+
+                    summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1})
+                    summary_writer.add_summary(summary_str, sess.run(global_step))
+
+            logger.info(""Optimization Finished!"")
+            val_x, val_y = sess.run([val_images, val_labels])
+            accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+            logger.info(f""Test Accuracy:", {accuracy}")
+
 
 
 if __name__ == "__main__":
