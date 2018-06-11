@@ -58,9 +58,31 @@ def main():
             with tf.control_dependencies([ema_apply_op]):
                 return tf.identity(batch_mean), tf.identity(batch_var)
 
-        mean, var = tf.cond(phase_train, mean_var_with_update, lambda: (ema_mean, ema_var))
-        normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, beta, game, 1e-3, True)
+        mean, var = control_flow_ops.cond(phase_train, mean_var_with_update, lambda: (ema_mean, ema_var))
+        normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, beta, gamma, 1e-3, True)
         return normed
+
+    def conv_layer_norm(x, n_out, phase_train):
+        """Batch normalization."""
+        beta_init = tf.constant_initializer(value=0.0, dtype=tf.float32)
+        gamma_init = tf.constant_initializer(value=1.0, dtype=tf.float32)
+        beta = tf.get_variable("beta", [n_out], initializer=beta_init)
+        gamma = tf.get_variable("gamma", [n_out], initializer=gamma_init)
+
+        batch_mean, batch_var = tf.nn.mements(x, [0], name="moments")
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        ema_apply_op = ema.apply([batch_mean, batch_var])
+        ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+
+        def mean_var_with_update():
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = control_flow_ops.cond(phase_train, mean_var_with_update, lambda: (ema_mean, ema_var))
+        x_r = tf.reshape(x, [-1, 1, 1, n_out])
+        normed = tf.nn.batch_norm_with_global_normalization(x_r, mean, var, beta, gamma, 1e-3, True)
+        return tf.reshape(normed, [-1, n_out])
+
 
     def conv2d(incoming, weight_shape, bias_shape, visualize=False):
         incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
