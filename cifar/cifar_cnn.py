@@ -62,7 +62,7 @@ def main():
         normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, beta, gamma, 1e-3, True)
         return normed
 
-    def conv_layer_norm(x, n_out, phase_train):
+    def layer_batch_norm(x, n_out, phase_train):
         """Batch normalization."""
         beta_init = tf.constant_initializer(value=0.0, dtype=tf.float32)
         gamma_init = tf.constant_initializer(value=1.0, dtype=tf.float32)
@@ -84,7 +84,7 @@ def main():
         return tf.reshape(normed, [-1, n_out])
 
 
-    def conv2d(incoming, weight_shape, bias_shape, visualize=False):
+    def conv2d(incoming, weight_shape, bias_shape, phase_train, visualize=False):
         incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
         weight_init = tf.random_normal_initializer(stddev=(2.0 / incoming) ** 0.5)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
@@ -92,44 +92,56 @@ def main():
             filter_summary(W, weight_shape)
         bias_init = tf.constant_initializer(value=0)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
-        return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(incoming, W, strides=[1, 1, 1, 1], padding="SAME"), b))
+        return tf.nn.relu(
+            conv_batch_norm(
+                tf.nn.bias_add(tf.nn.conv2d(incoming, W, strides=[1, 1, 1, 1], padding="SAME"), b),
+                weight_shape[3],
+                phase_train,
+            )
+        )
 
     def max_pool(incoming, k=2):
         return tf.nn.max_pool(incoming, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding="SAME")
 
-    def layer(incoming, weight_shape, bias_shape):
+    def layer(incoming, weight_shape, bias_shape, phase_train):
         weight_init = tf.random_normal_initializer(stddev=(2.0 / weight_shape[0]) ** 0.05)
         bias_init = tf.constant_initializer(value=0)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
-        return tf.nn.relu(tf.matmul(incoming, W) + b)
+        return tf.nn.relu(
+            layer_batch_norm(
+                tf.matmul(incoming, W) + b,
+                weight_shape[1],
+                phase_train
+            )
+        )
 
-    def inference(x, keep_prob):
+    def inference(x, keep_prob, phase_train):
 
         with tf.variable_scope("conv_1"):
-            conv_1 = conv2d(x, [5, 5, 3, 64], [64], visualize=True)
+            conv_1 = conv2d(x, [5, 5, 3, 64], [64], phase_train, visualize=True)
             pool_1 = max_pool(conv_1)
 
         with tf.variable_scope("conv_2"):
-            conv_1 = conv2d(x, [5, 5, 3, 64], [64])
-            pool_1 = max_pool(conv_1)
+            conv_2 = conv2d(pool_1, [5, 5, 3, 64], [64], phase_train)
+            pool_1 = max_pool(conv_2)
 
         with tf.variable_scope("fc_1"):
             dim = 1
             for d in pool_2.get_shape()[1:].as_list():
                 dim *= d
             pool_2_flat = tf.reshape(pool_2, [-1, dim])
-            fc_1 = layer(pool_2_flat, [dim, 384], [384])
+            fc_1 = layer(pool_2_flat, [dim, 384], [384], phase_train)
 
             # apply drpout
             fc_1_drop = tf.nn.dropout(fc_1, keep_prob)
 
         with tf.variabel_scope("fc_2"):
-            fc_2 = layer(fc_1_drop, [384, 192], [192])
+            fc_2 = layer(fc_1_drop, [384, 192], [192], phase_train)
             fc_2_drop = tf.nn.dropout(fc_2, keep_prob)
 
         with tf.variable_scope("output"):
-            output = layer(fc_2_drop, [192, 10], [10])
+            output = layer(fc_2_drop, [192, 10], [10], phase_train)
 
         return output
 
@@ -156,11 +168,13 @@ def main():
             x = tf.placeholder("float", [None, 24, 24, 3])
             y = tf.placeholder("int32", [None])
             keep_prob = tf.placeholder(tf.float32)
+            # Training or Testing
+            phase_train = tf.placeholder(tf.bool)
 
             distorted_images, distorted_labels = distorted_inputs()
             val_images, val_labels = inputs()
 
-            output = inference(x, keep_prob)
+            output = inference(x, keep_prob, phase_train=phase_train)
             cost = loss(output, y)
 
             global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -186,7 +200,10 @@ def main():
 
                     train_x, train_y = sess.run([distorted_images, distorted_labels])
 
-                    _, new_cost = sess.run([train_op, cost], feed_dict={x: train_x, y: train_y, keep_prob: 0.5})
+                    _, new_cost = sess.run(
+                        [train_op, cost],
+                        feed_dict={x: train_x, y: train_y, keep_prob: 0.5, phase_train: True}
+                    )
 
                     avg_cost += new_cost / total_batch
 
@@ -194,16 +211,16 @@ def main():
                     logger.info(f"Epoch: {epoch + 1} : {avg_cost}")
 
                     val_x, val_y = sess.run([val_images, val_labels])
-                    accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+                    accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
 
                     logger.info(f"Validation Error: {1 - accuracy}")
 
-                    summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1})
+                    summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1, phase_train: False})
                     summary_writer.add_summary(summary_str, sess.run(global_step))
 
             logger.info("Optimization Finished!")
             val_x, val_y = sess.run([val_images, val_labels])
-            accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+            accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
             logger.info(f"Test Accuracy:, {accuracy}")
 
 
