@@ -1,6 +1,7 @@
 """Building a Conv for Cafar in TensorFlow."""
 import os
 import tensorflow as tf
+from tensorflow.python.ops import control_flow_ops
 import numpy as np
 from neologger import Logger
 
@@ -19,8 +20,8 @@ logger = Logger(PROJ_NAME)
 def main():
     """Main."""
     # Define model attrubite.
-    learning_rate = 0.001
-    training_epochs = 10
+    learning_rate = 0.01
+    training_epochs = 500
     batch_size = 128
     display_step = 1
 
@@ -41,7 +42,49 @@ def main():
         V_T = tf.transpose(V, (3, 0, 1, 2))
         tf.summary.image("filters", V_T, max_outputs=64)
 
-    def conv2d(incoming, weight_shape, bias_shape, visualize=False):
+    def conv_batch_norm(x, n_out, phase_train):
+        """Batch normalization."""
+        beta_init = tf.constant_initializer(value=0.0, dtype=tf.float32)
+        gamma_init = tf.constant_initializer(value=1.0, dtype=tf.float32)
+        beta = tf.get_variable("beta", [n_out], initializer=beta_init)
+        gamma = tf.get_variable("gamma", [n_out], initializer=gamma_init)
+
+        batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name="moments")
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        ema_apply_op = ema.apply([batch_mean, batch_var])
+        ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+
+        def mean_var_with_update():
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = control_flow_ops.cond(phase_train, mean_var_with_update, lambda: (ema_mean, ema_var))
+        normed = tf.nn.batch_norm_with_global_normalization(x, mean, var, beta, gamma, 1e-3, True)
+        return normed
+
+    def layer_batch_norm(x, n_out, phase_train):
+        """Batch normalization."""
+        beta_init = tf.constant_initializer(value=0.0, dtype=tf.float32)
+        gamma_init = tf.constant_initializer(value=1.0, dtype=tf.float32)
+        beta = tf.get_variable("beta", [n_out], initializer=beta_init)
+        gamma = tf.get_variable("gamma", [n_out], initializer=gamma_init)
+
+        batch_mean, batch_var = tf.nn.moments(x, [0], name="moments")
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        ema_apply_op = ema.apply([batch_mean, batch_var])
+        ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
+
+        def mean_var_with_update():
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = control_flow_ops.cond(phase_train, mean_var_with_update, lambda: (ema_mean, ema_var))
+        x_r = tf.reshape(x, [-1, 1, 1, n_out])
+        normed = tf.nn.batch_norm_with_global_normalization(x_r, mean, var, beta, gamma, 1e-3, True)
+        return tf.reshape(normed, [-1, n_out])
+
+
+    def conv2d(x, weight_shape, bias_shape, phase_train, visualize=False):
         incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
         weight_init = tf.random_normal_initializer(stddev=(2.0 / incoming) ** 0.5)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
@@ -49,62 +92,75 @@ def main():
             filter_summary(W, weight_shape)
         bias_init = tf.constant_initializer(value=0)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
-        return tf.nn.relu(tf.nn.bias_add(tf.nn.conv2d(incoming, W, strides=[1, 1, 1, 1], padding="SAME"), b))
+        logits = tf.nn.bias_add(tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME'), b)
+        return tf.nn.relu(
+            conv_batch_norm(
+                logits,
+                weight_shape[3],
+                phase_train,
+            )
+        )
 
     def max_pool(incoming, k=2):
         return tf.nn.max_pool(incoming, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding="SAME")
 
-    def layer(incoming, weight_shape, bias_shape):
+    def layer(incoming, weight_shape, bias_shape, phase_train):
         weight_init = tf.random_normal_initializer(stddev=(2.0 / weight_shape[0]) ** 0.05)
         bias_init = tf.constant_initializer(value=0)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
-        return tf.nn.relu(tf.matmul(incoming, W) + b)
+        return tf.nn.relu(
+            layer_batch_norm(
+                tf.matmul(incoming, W) + b,
+                weight_shape[1],
+                phase_train
+            )
+        )
 
-    def inference(x, keep_prob):
+    def inference(x, keep_prob, phase_train):
 
         with tf.variable_scope("conv_1"):
-            conv_1 = conv2d(x, [5, 5, 3, 64], [64], visualize=True)
+            conv_1 = conv2d(x, [5, 5, 3, 64], [64], phase_train, visualize=True)
             pool_1 = max_pool(conv_1)
 
         with tf.variable_scope("conv_2"):
-            conv_1 = conv2d(x, [5, 5, 3, 64], [64])
-            pool_1 = max_pool(conv_1)
+            conv_2 = conv2d(pool_1, [5, 5, 64, 64], [64], phase_train)
+            pool_2 = max_pool(conv_2)
 
         with tf.variable_scope("fc_1"):
             dim = 1
             for d in pool_2.get_shape()[1:].as_list():
                 dim *= d
             pool_2_flat = tf.reshape(pool_2, [-1, dim])
-            fc_1 = layer(pool_2_flat, [dim, 384], [384])
+            fc_1 = layer(pool_2_flat, [dim, 384], [384], phase_train)
 
             # apply drpout
             fc_1_drop = tf.nn.dropout(fc_1, keep_prob)
 
-        with tf.variabel_scope("fc_2"):
-            fc_2 = layer(fc_1_drop, [384, 192], [192])
+        with tf.variable_scope("fc_2"):
+            fc_2 = layer(fc_1_drop, [384, 192], [192], phase_train)
             fc_2_drop = tf.nn.dropout(fc_2, keep_prob)
 
         with tf.variable_scope("output"):
-            output = layer(fc_2_drop, [192, 10], [10])
+            output = layer(fc_2_drop, [192, 10], [10], phase_train)
 
         return output
 
     def loss(output, y):
-        xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, tf.cast(y, tf.int64))
+        xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=output, labels=tf.cast(y, tf.int64))
         loss = tf.reduce_mean(xentropy)
         return loss
 
-    def trainning(cost, global_step):
-        tf.scalar_summary("cost", cost)
+    def training(cost, global_step):
+        tf.summary.scalar("cost", cost)
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        train_op = optimizer.minize(cost, global_step=global_step)
+        train_op = optimizer.minimize(cost, global_step=global_step)
         return train_op
 
     def evaluate(output, y):
         correct_prediction = tf.equal(tf.cast(tf.argmax(output, 1), dtype=tf.int32), y)
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        tf.scalar_summary("validation error", (1.0 - accuracy))
+        tf.summary.scalar("validation error", (1.0 - accuracy))
         return accuracy
 
 
@@ -113,17 +169,19 @@ def main():
             x = tf.placeholder("float", [None, 24, 24, 3])
             y = tf.placeholder("int32", [None])
             keep_prob = tf.placeholder(tf.float32)
+            # Training or Testing
+            phase_train = tf.placeholder(tf.bool)
 
             distorted_images, distorted_labels = distorted_inputs()
             val_images, val_labels = inputs()
 
-            output = inference(x, keep_prob)
+            output = inference(x, keep_prob, phase_train=phase_train)
             cost = loss(output, y)
 
             global_step = tf.Variable(0, name="global_step", trainable=False)
             train_op = training(cost, global_step)
             eval_op = evaluate(output, y)
-            summary_op = tf.merge_all_summaries()
+            summary_op = tf.summary.merge_all()
             sess = tf.Session()
             summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
 
@@ -143,7 +201,10 @@ def main():
 
                     train_x, train_y = sess.run([distorted_images, distorted_labels])
 
-                    _, new_cost = sess.run([train_op, cost], feed_dict={x: train_x, y: train_y, keep_prob: 0.5})
+                    _, new_cost = sess.run(
+                        [train_op, cost],
+                        feed_dict={x: train_x, y: train_y, keep_prob: 0.5, phase_train: True}
+                    )
 
                     avg_cost += new_cost / total_batch
 
@@ -151,16 +212,16 @@ def main():
                     logger.info(f"Epoch: {epoch + 1} : {avg_cost}")
 
                     val_x, val_y = sess.run([val_images, val_labels])
-                    accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+                    accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
 
                     logger.info(f"Validation Error: {1 - accuracy}")
 
-                    summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1})
+                    summary_str = sess.run(summary_op, feed_dict={x: train_x, y: train_y, keep_prob: 1, phase_train: False})
                     summary_writer.add_summary(summary_str, sess.run(global_step))
 
             logger.info("Optimization Finished!")
             val_x, val_y = sess.run([val_images, val_labels])
-            accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1})
+            accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
             logger.info(f"Test Accuracy:, {accuracy}")
 
 
