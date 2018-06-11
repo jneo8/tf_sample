@@ -21,7 +21,7 @@ def main():
     """Main."""
     # Define model attrubite.
     learning_rate = 0.01
-    training_epochs = 1000
+    training_epochs = 500
     batch_size = 128
     display_step = 1
 
