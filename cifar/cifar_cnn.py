@@ -20,8 +20,8 @@ logger = Logger(PROJ_NAME)
 def main():
     """Main."""
     # Define model attrubite.
-    learning_rate = 0.001
-    training_epochs = 10
+    learning_rate = 0.01
+    training_epochs = 1000
     batch_size = 128
     display_step = 1
 
@@ -49,7 +49,7 @@ def main():
         beta = tf.get_variable("beta", [n_out], initializer=beta_init)
         gamma = tf.get_variable("gamma", [n_out], initializer=gamma_init)
 
-        batch_mean, batch_var = tf.nn.mements(x, [0, 1, 2], name="moments")
+        batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2], name="moments")
         ema = tf.train.ExponentialMovingAverage(decay=0.9)
         ema_apply_op = ema.apply([batch_mean, batch_var])
         ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
@@ -69,7 +69,7 @@ def main():
         beta = tf.get_variable("beta", [n_out], initializer=beta_init)
         gamma = tf.get_variable("gamma", [n_out], initializer=gamma_init)
 
-        batch_mean, batch_var = tf.nn.mements(x, [0], name="moments")
+        batch_mean, batch_var = tf.nn.moments(x, [0], name="moments")
         ema = tf.train.ExponentialMovingAverage(decay=0.9)
         ema_apply_op = ema.apply([batch_mean, batch_var])
         ema_mean, ema_var = ema.average(batch_mean), ema.average(batch_var)
@@ -84,7 +84,7 @@ def main():
         return tf.reshape(normed, [-1, n_out])
 
 
-    def conv2d(incoming, weight_shape, bias_shape, phase_train, visualize=False):
+    def conv2d(x, weight_shape, bias_shape, phase_train, visualize=False):
         incoming = weight_shape[0] * weight_shape[1] * weight_shape[2]
         weight_init = tf.random_normal_initializer(stddev=(2.0 / incoming) ** 0.5)
         W = tf.get_variable("W", weight_shape, initializer=weight_init)
@@ -92,9 +92,10 @@ def main():
             filter_summary(W, weight_shape)
         bias_init = tf.constant_initializer(value=0)
         b = tf.get_variable("b", bias_shape, initializer=bias_init)
+        logits = tf.nn.bias_add(tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME'), b)
         return tf.nn.relu(
             conv_batch_norm(
-                tf.nn.bias_add(tf.nn.conv2d(incoming, W, strides=[1, 1, 1, 1], padding="SAME"), b),
+                logits,
                 weight_shape[3],
                 phase_train,
             )
@@ -123,8 +124,8 @@ def main():
             pool_1 = max_pool(conv_1)
 
         with tf.variable_scope("conv_2"):
-            conv_2 = conv2d(pool_1, [5, 5, 3, 64], [64], phase_train)
-            pool_1 = max_pool(conv_2)
+            conv_2 = conv2d(pool_1, [5, 5, 64, 64], [64], phase_train)
+            pool_2 = max_pool(conv_2)
 
         with tf.variable_scope("fc_1"):
             dim = 1
@@ -136,7 +137,7 @@ def main():
             # apply drpout
             fc_1_drop = tf.nn.dropout(fc_1, keep_prob)
 
-        with tf.variabel_scope("fc_2"):
+        with tf.variable_scope("fc_2"):
             fc_2 = layer(fc_1_drop, [384, 192], [192], phase_train)
             fc_2_drop = tf.nn.dropout(fc_2, keep_prob)
 
@@ -146,20 +147,20 @@ def main():
         return output
 
     def loss(output, y):
-        xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(output, tf.cast(y, tf.int64))
+        xentropy = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=output, labels=tf.cast(y, tf.int64))
         loss = tf.reduce_mean(xentropy)
         return loss
 
-    def trainning(cost, global_step):
-        tf.scalar_summary("cost", cost)
+    def training(cost, global_step):
+        tf.summary.scalar("cost", cost)
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        train_op = optimizer.minize(cost, global_step=global_step)
+        train_op = optimizer.minimize(cost, global_step=global_step)
         return train_op
 
     def evaluate(output, y):
         correct_prediction = tf.equal(tf.cast(tf.argmax(output, 1), dtype=tf.int32), y)
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        tf.scalar_summary("validation error", (1.0 - accuracy))
+        tf.summary.scalar("validation error", (1.0 - accuracy))
         return accuracy
 
 
@@ -180,7 +181,7 @@ def main():
             global_step = tf.Variable(0, name="global_step", trainable=False)
             train_op = training(cost, global_step)
             eval_op = evaluate(output, y)
-            summary_op = tf.merge_all_summaries()
+            summary_op = tf.summary.merge_all()
             sess = tf.Session()
             summary_writer = tf.summary.FileWriter(LOG_PATH, graph=sess.graph_def)
 
@@ -211,7 +212,7 @@ def main():
                     logger.info(f"Epoch: {epoch + 1} : {avg_cost}")
 
                     val_x, val_y = sess.run([val_images, val_labels])
-                    accuracy = sess,run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
+                    accuracy = sess.run(eval_op, feed_dict={x: val_x, y: val_y, keep_prob: 1, phase_train: False})
 
                     logger.info(f"Validation Error: {1 - accuracy}")
 
