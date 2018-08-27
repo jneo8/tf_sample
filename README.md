@@ -15,6 +15,12 @@ pip install tensorflow
 pip install tensorflow-gpu
 ```
 
+- logger
+
+```
+pip install -r pip.txt
+```
+
 
 - tensorboard
 
